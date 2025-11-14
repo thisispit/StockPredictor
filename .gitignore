@@ -1,0 +1,6 @@
+__pycache__/
+data/
+processed/
+*.pyc
+.vscode/
+.DS_Store

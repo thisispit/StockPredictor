@@ -1,0 +1,9 @@
+pandas
+numpy
+requests
+scikit-learn
+bokeh
+pytest
+statsmodels
+python-dateutil
+joblib
