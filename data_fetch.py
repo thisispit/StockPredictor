@@ -1,41 +1,52 @@
 #!/usr/bin/env python3
 """Download OCLHV data for given tickers and an index between dates.
-Tries raw GitHub repo URL first; falls back to asking user to place CSVs.
 """
-import os, argparse
-import requests
+import os
+import yfinance as yf
+import argparse
 
-RAW_BASE = 'https://raw.githubusercontent.com/swapniljariwala/nsepy/master/data'
-
-def try_download_csv(symbol, out_dir):
+def download_ticker_data(symbol, start_date, end_date, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    filename = f"{symbol}.csv"
-    urls = [
-        f"{RAW_BASE}/{filename}",
-        f"{RAW_BASE}/{symbol.lower()}.csv"
-    ]
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=15)
-            if r.status_code == 200 and 'Date' in r.text:
-                with open(os.path.join(out_dir, filename), 'w', encoding='utf-8') as f:
-                    f.write(r.text)
-                print('Downloaded', url)
-                return os.path.join(out_dir, filename)
-        except Exception:
-            pass
-    print(f"Could not download {symbol}. Place {filename} in {out_dir} manually.")
-    return None
+    try:
+        data = yf.download(symbol, start=start_date, end=end_date)
+        if not data.empty:
+            # yfinance uses 'Adj Close' so we rename it to 'Close' to match the old format
+            if 'Adj Close' in data.columns:
+                data = data.rename(columns={'Adj Close': 'Close'})
+            
+            # Ensure all expected columns are present, fill with 0 if not
+            for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                if col not in data.columns:
+                    data[col] = 0
+
+            # Select and reorder columns to match the old format
+            data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+
+            # Format the date index to string 'YYYY-MM-DD'
+            data.index = data.index.strftime('%Y-%m-%d')
+            
+            # Save to CSV with 'Date' as a column
+            filename = f"{symbol.replace('^', '')}.csv"
+            data.to_csv(os.path.join(out_dir, filename), index_label='Date', header=True)
+            print(f"Downloaded {symbol} data to {out_dir}")
+        else:
+            print(f"No data found for {symbol} between {start_date} and {end_date}")
+    except Exception as e:
+        print(f"Could not download {symbol}. Error: {e}")
 
 def main():
-    import argparse
     p = argparse.ArgumentParser()
-    p.add_argument('--tickers', nargs='+', default=['INFY','TCS'])
-    p.add_argument('--index', default='NIFTYIT')
+    p.add_argument('--tickers', nargs='+', default=['INFY.NS', 'TCS.NS'])
+    p.add_argument('--index', default='^NSEI')
+    p.add_argument('--start', default='2000-01-01')
+    p.add_argument('--end', default='2023-12-31')
     p.add_argument('--out', default='data')
     args = p.parse_args()
-    for t in args.tickers + [args.index]:
-        try_download_csv(t, args.out)
+
+    # Download data for tickers and index
+    for ticker in args.tickers:
+        download_ticker_data(ticker, args.start, args.end, args.out)
+    download_ticker_data(args.index, args.start, args.end, args.out)
 
 if __name__ == '__main__':
     main()
